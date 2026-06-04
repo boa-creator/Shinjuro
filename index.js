@@ -309,7 +309,9 @@ const express = require('express');
 const app = express();
 
 app.get('/', (req, res) => {
-  res.send('Bot is alive');
+  res.status(200).send('Bot is alive');
 });
 
-app.listen(process.env.PORT || 3000);
+app.listen(process.env.PORT, '0.0.0.0', () => {
+  console.log("Web server started");
+});
