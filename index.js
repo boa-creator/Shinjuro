@@ -9,6 +9,9 @@ const {
   ChannelType
 } = require('discord.js');
 
+const express = require('express');
+const app = express();
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -24,13 +27,16 @@ const restrictedRoleName = "Accès restreint";
 const RULES_CHANNEL_ID = "1511373888041259048";
 const TICKET_CHANNEL_ID = "1512123337038364892";
 
+const MOD_LOGS_ID = "1512505687559635005";
+const TICKET_LOGS_ID = "1512512378300923924";
+
 // ================= READY =================
 client.once('ready', async () => {
   console.log("Bot connecté");
 
   try {
 
-    // ================= RÈGLEMENT (ANTI SPAM) =================
+    // ================= RÈGLEMENT =================
     const rulesChannel = await client.channels.fetch(RULES_CHANNEL_ID);
     const rulesMessages = await rulesChannel.messages.fetch({ limit: 10 });
 
@@ -46,40 +52,19 @@ client.once('ready', async () => {
       );
 
       const rules = `
-Bienvenue sur notre serveur ! Afin de garantir une expérience agréable et respectueuse pour tous, merci de prendre connaissance et de respecter les règles suivantes.
+
+Bienvenue sur notre serveur !
 
 **Respect et bienveillance**
+- Respect obligatoire
+- Aucun harcèlement
 
-Traitez chaque membre avec courtoisie et respect, sans distinction d'origine, de genre, d'orientation sexuelle, de religion ou d'opinions.
-Les propos haineux, discriminatoires, menaçants ou harcelants sont strictement interdits.
-Tout comportement perturbateur ou toxique sera sanctionné.
-
-**Contenu inapproprié**
-
-Le partage de contenu à caractère sexuel, violent, choquant ou illégal est formellement prohibé.
-
-**Langage et communication**
-
-Utilisez un langage clair et respectueux. Évitez les insultes, le langage vulgaire et le spam.
-
-**Publicité et promotions**
-
-La publicité non autorisée est interdite. Pour partager un lien ou une promotion, contactez un modérateur au préalable.
-Les liens vers des sites frauduleux, illégaux ou à caractère pornographique sont formellement interdits.
-
-**Comportement en cas de conflit**
-
-En cas de désaccord ou de conflit, adressez-vous calmement à un modérateur plutôt que de répondre aux provocations.
-Le lynchage ou l'acharnement contre un membre est interdit.
-
-**Respect de la modération**
-
-Les décisions des modérateurs sont à respecter. En cas de doute ou de contestation, contactez un administrateur en privé.
-Les modérateurs se réservent le droit de supprimer tout contenu jugé inapproprié.
+**Contenu interdit**
+- NSFW interdit
+- Insultes interdites
 
 **Sanctions**
-
-Le non-respect de ces règles peut entraîner des sanctions allant de l'avertissement au bannissement définitif.
+Le non-respect entraîne des sanctions.
       `;
 
       await rulesChannel.send({
@@ -88,8 +73,6 @@ Le non-respect de ces règles peut entraîner des sanctions allant de l'avertiss
       });
 
       console.log("Règlement envoyé");
-    } else {
-      console.log("Règlement déjà présent");
     }
 
     // ================= TICKETS =================
@@ -113,30 +96,27 @@ Le non-respect de ces règles peut entraîner des sanctions allant de l'avertiss
       });
 
       console.log("Tickets envoyés");
-    } else {
-      console.log("Tickets déjà présents");
     }
 
   } catch (err) {
-    console.log("Erreur ready :", err);
+    console.log(err);
   }
 });
 
-// ================= ROLE JOIN =================
+// ================= ROLE =================
 client.on('guildMemberAdd', async member => {
   const role = member.guild.roles.cache.find(r => r.name === restrictedRoleName);
   if (role) member.roles.add(role).catch(() => {});
 });
 
-// ================= INTERACTIONS =================
+// ================= BUTTONS =================
 client.on('interactionCreate', async interaction => {
 
   if (!interaction.isButton()) return;
 
-  // ================= ACCEPT RULES =================
+  // ACCEPT RULES
   if (interaction.customId === 'accept_rules') {
     const role = interaction.guild.roles.cache.find(r => r.name === restrictedRoleName);
-
     if (role) await interaction.member.roles.remove(role);
 
     return interaction.reply({
@@ -145,17 +125,14 @@ client.on('interactionCreate', async interaction => {
     });
   }
 
-  // ================= TICKET CREATE =================
+  // CREATE TICKET
   if (interaction.customId === 'create_ticket') {
 
     const channel = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.username}`,
       type: ChannelType.GuildText,
       permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
+        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         {
           id: interaction.user.id,
           allow: [
@@ -179,14 +156,25 @@ client.on('interactionCreate', async interaction => {
       components: [closeBtn]
     });
 
+    const logChannel = interaction.guild.channels.cache.get(TICKET_LOGS_ID);
+    if (logChannel) {
+      logChannel.send(`🎟️ Ticket ouvert par ${interaction.user.tag}`);
+    }
+
     return interaction.reply({
       content: `✔️ Ticket créé : ${channel}`,
       ephemeral: true
     });
   }
 
-  // ================= CLOSE TICKET =================
+  // CLOSE TICKET
   if (interaction.customId === 'close_ticket') {
+
+    const logChannel = interaction.guild.channels.cache.get(TICKET_LOGS_ID);
+    if (logChannel) {
+      logChannel.send(`❌ Ticket fermé : ${interaction.channel.name}`);
+    }
+
     return interaction.channel.delete();
   }
 });
@@ -195,7 +183,6 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
-  // ===== MUTE =====
   if (message.content.startsWith('!mute')) {
 
     if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
@@ -228,7 +215,6 @@ client.on('messageCreate', async message => {
     });
   }
 
-  // ===== UNMUTE =====
   if (message.content.startsWith('!unmute')) {
 
     if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
@@ -279,12 +265,43 @@ client.on('interactionCreate', async interaction => {
       threat: 24 * 60 * 60 * 1000
     };
 
-    const ms = durations[interaction.values[0]];
+    const labels = {
+      insult: "Insulte",
+      spam: "Spam",
+      troll: "Troll",
+      harassment: "Harcèlement",
+      inappropriate: "Contenu inapproprié",
+      ads: "Publicité",
+      racism: "Racisme",
+      discrimination: "Discrimination",
+      threat: "Menace"
+    };
 
-    await member.timeout(ms);
+    const timeText = {
+      insult: "10 minutes",
+      spam: "5 minutes",
+      troll: "10 minutes",
+      harassment: "1 heure",
+      inappropriate: "1 heure",
+      ads: "10 minutes",
+      racism: "24 heures",
+      discrimination: "24 heures",
+      threat: "24 heures"
+    };
+
+    const reason = interaction.values[0];
+
+    await member.timeout(durations[reason]);
+
+    const log = interaction.guild.channels.cache.get(MOD_LOGS_ID);
+    if (log) {
+      log.send(
+        `${member.user.tag} a été mute par ${interaction.user.tag}\nRaison : ${labels[reason]}\nDurée : ${timeText[reason]}`
+      );
+    }
 
     return interaction.update({
-      content: `✔️ ${member.user.tag} mute`,
+      content: `${member.user.tag} a été mute\nRaison : ${labels[reason]}\nDurée : ${timeText[reason]}`,
       components: []
     });
   }
@@ -297,17 +314,29 @@ client.on('interactionCreate', async interaction => {
 
     await member.timeout(null);
 
+    const reasons = {
+      end: "Fin de sanction",
+      error: "Erreur de modération",
+      other: "Autre"
+    };
+
+    const reason = reasons[interaction.values[0]];
+
+    const log = interaction.guild.channels.cache.get(MOD_LOGS_ID);
+    if (log) {
+      log.send(
+        `${member.user.tag} a été démute par ${interaction.user.tag}\nRaison : ${reason}`
+      );
+    }
+
     return interaction.update({
-      content: `✔️ ${member.user.tag} unmute`,
+      content: `${member.user.tag} a été démute\nRaison : ${reason}`,
       components: []
     });
   }
 });
 
-client.login(process.env.TOKEN);
-const express = require('express');
-const app = express();
-
+// ================= EXPRESS (RENDER) =================
 app.get('/', (req, res) => {
   res.status(200).send('Bot is alive');
 });
@@ -315,3 +344,12 @@ app.get('/', (req, res) => {
 app.listen(process.env.PORT, '0.0.0.0', () => {
   console.log("Server running on port " + process.env.PORT);
 });
+
+// KEEP ALIVE
+setInterval(() => {
+  fetch(process.env.RENDER_EXTERNAL_URL)
+    .then(() => console.log("Ping keep-alive"))
+    .catch(() => {});
+}, 14 * 60 * 1000);
+
+client.login(process.env.TOKEN);
